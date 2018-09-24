@@ -1,8 +1,26 @@
-﻿<#
+<#
 
     File: Sherlock.ps1
     Author: @_RastaMouse
     License: GNU General Public License v3.0
+
+#>
+
+<#
+
+RTM build reference, because I'm stupid and forget...
+
+6002: Vista SP2/2008 SP2
+7600: 7/2008 R2
+7601: 7 SP1/2008 R2 SP1
+9200: 8/2012
+9600: 8.1/2012 R2
+10240: 10 Threshold
+10586: 10 Threshold 2
+14393: 10 Redstone/2016
+15063: 10 Redstone 2
+16299: 10 Redstone 3
+17134: 10 Redstone 4
 
 #>
 
@@ -19,7 +37,7 @@ function Get-FileVersionInfo ($FilePath) {
 
 function Get-InstalledSoftware($SoftwareName) {
 
-    $SoftwareVersion = Get-WmiObject -Class Win32_Product | Where { $_.Name -eq $SoftwareName } | Select-Object Version
+    $SoftwareVersion = Get-WmiObject -Class Win32_Product | Where-Object { $_.Name -eq $SoftwareName } | Select-Object Version
     $SoftwareVersion = $SoftwareVersion.Version  # I have no idea what I'm doing
     
     return $SoftwareVersion
@@ -74,6 +92,7 @@ function New-ExploitTable {
     # MS16
     $Global:ExploitTable.Rows.Add("'mrxdav.sys' WebDAV","MS16-016","2016-0051","https://www.exploit-db.com/exploits/40085/")
     $Global:ExploitTable.Rows.Add("Secondary Logon Handle","MS16-032","2016-0099","https://www.exploit-db.com/exploits/39719/")
+    $Global:ExploitTable.Rows.Add("Windows Kernel-Mode Drivers EoP","MS16-034","2016-0093/94/95/96","https://github.com/SecWiki/windows-kernel-exploits/tree/master/MS16-034?")
     $Global:ExploitTable.Rows.Add("Win32k Elevation of Privilege","MS16-135","2016-7255","https://github.com/FuzzySecurity/PSKernel-Primitives/tree/master/Sample-Exploits/MS16-135")
     # Miscs that aren't MS
     $Global:ExploitTable.Rows.Add("Nessus Agent 6.6.2 - 6.10.3","N/A","2017-7199","https://aspe1337.blogspot.co.uk/2017/04/writeup-of-cve-2017-7199.html")
@@ -84,7 +103,7 @@ function Set-ExploitTable ($MSBulletin, $VulnStatus) {
 
     if ( $MSBulletin -like "MS*" ) {
 
-        $Global:ExploitTable | Where { $_.MSBulletin -eq $MSBulletin
+        $Global:ExploitTable | Where-Object { $_.MSBulletin -eq $MSBulletin
 
         } | ForEach-Object {
 
@@ -95,7 +114,7 @@ function Set-ExploitTable ($MSBulletin, $VulnStatus) {
     } else {
 
 
-    $Global:ExploitTable | Where { $_.CVEID -eq $MSBulletin
+    $Global:ExploitTable | Where-Object { $_.CVEID -eq $MSBulletin
 
         } | ForEach-Object {
 
@@ -130,6 +149,7 @@ function Find-AllVulns {
         Find-MS15078
         Find-MS16016
         Find-MS16032
+        Find-MS16034
         Find-MS16135
         Find-CVE20177199
 
@@ -436,6 +456,43 @@ function Find-MS16032 {
                 default { $VulnStatus = "Not Vulnerable" }
 
             }
+    }
+    
+    Set-ExploitTable $MSBulletin $VulnStatus
+
+}
+
+function Find-MS16034 {
+
+    $MSBulletin = "MS16-034"
+    
+    $Architecture = Get-Architecture
+
+    if ( $Architecture[1] -eq "AMD64" -or $Architecture[0] -eq "32-bit" ) {
+
+        $Path = $env:windir + "\system32\win32k.sys"
+
+    } ElseIf ( $Architecture[0] -eq "64-bit" -and $Architecture[1] -eq "x86" ) {
+
+        $Path = $env:windir + "\sysnative\win32k.sys"
+
+    } 
+
+    $VersionInfo = Get-FileVersionInfo($Path)
+
+    $VersionInfo = $VersionInfo.Split(".")
+
+    $Build = [int]$VersionInfo[2]
+    $Revision = [int]$VersionInfo[3].Split(" ")[0]
+
+    switch ( $Build ) {
+
+        6002 { $VulnStatus = @("Not Vulnerable","Appears Vulnerable")[ $Revison -lt 19597 -Or $Revision -lt 23908 ] }
+        7601 { $VulnStatus = @("Not Vulnerable","Appears Vulnerable")[ $Revision -lt 19145 -Or $Revision -lt 23346 ] }
+        9200 { $VulnStatus = @("Not Vulnerable","Appears Vulnerable")[ $Revison -lt 17647 -Or $Revision -lt 21766 ] }
+        9600 { $VulnStatus = @("Not Vulnerable","Appears Vulnerable")[ $Revison -lt 18228 ] }
+        default { $VulnStatus = "Not Vulnerable" }
+
     }
     
     Set-ExploitTable $MSBulletin $VulnStatus
